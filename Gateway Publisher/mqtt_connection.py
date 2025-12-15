@@ -13,23 +13,23 @@ import board
 import busio
 
 # Import both sensors
-import adafruit_vl53l0x  # Proximity sensor (for distance measurement)
-import adafruit_tsl2561  # Lux sensor (for light detection)
+import adafruit_tsl2591  # Proximity sensor (for distance measurement)
+import adafruit_vcnl4010 # Lux sensor (for light detection)
 
 # Initialize I2C bus
 i2c = busio.I2C(board.SCL, board.SDA)
 
 # Initialize both sensors
-proximity_sensor = adafruit_vl53l0x.VL53L0X(i2c)  # Distance sensor
+proximity_sensor = adafruit_vcnl4010.VCNL4010(i2c)  # Distance sensor
 proximity_sensor.measurement_timing_budget = 20000  # 20ms timing budget
 
-lux_sensor = adafruit_tsl2561.TSL2561(i2c)  # Light sensor
-lux_sensor.gain = 0  # 1x gain
-lux_sensor.integration_time = 0x02  # 402ms integration
+lux_sensor = adafruit_tsl2591.TSL2591(i2c)  # Light sensor
+lux_sensor.gain = adafruit_tsl2591.GAIN_MED  
+lux_sensor.integration_time = adafruit_tsl2591.INTEGRATIONTIME_200MS  
 
 # Mailbox configuration
 DEVICE_ID = "mailbox_01"  # Change this for each mailbox
-PROXIMITY_MAIL_THRESHOLD_MM = 100  # Distance in mm - adjust based on your setup
+PROXIMITY_MAIL_THRESHOLD_MM = 2000  # Distance in mm - adjust based on your setup
 LUX_OPEN_THRESHOLD = 500  # Lux value - adjust based on your environment
 PROXIMITY_TIMEOUT = 1000  # Max valid reading distance in mm
 
@@ -67,32 +67,23 @@ def on_log(client, userdata, level, buf):  # Message is in buf
 
 ############### Sensor section ##################
 def get_lux():
-    """Read lux sensor and return rounded value"""
     try:
         lux = lux_sensor.lux
         if lux is not None:
-            lux_value = round(Decimal(lux), 3)  # Rounds the lux value to 3 decimals
-            print('Light level: {0} lux'.format(lux_value))
+            lux_value = round(float(lux), 2)
+            print(f'Light level: {lux_value} lux')
             return lux_value
-        else:
-            print("Lux sensor returned None")
-            return None
+        return None
     except Exception as e:
         print(f"Error reading lux sensor: {e}")
         return None
 
 def get_proximity():
-    """Read proximity sensor and return distance in mm"""
+    """Read VCNL4010 proximity (relative value)"""
     try:
-        distance = proximity_sensor.range
-        
-        # Check if reading is valid
-        if distance < PROXIMITY_TIMEOUT:
-            print(f'Proximity distance: {distance} mm')
-            return distance
-        else:
-            print(f'Proximity reading out of range: {distance} mm')
-            return None
+        proximity = proximity_sensor.proximity
+        print(f'Proximity value: {proximity}')
+        return proximity
     except Exception as e:
         print(f"Error reading proximity sensor: {e}")
         return None
@@ -107,7 +98,7 @@ def determine_mailbox_state(proximity_data, lux_data):
     
     # Check for mail using proximity sensor
     if proximity_data is not None:
-        has_mail_now = proximity_data < PROXIMITY_MAIL_THRESHOLD_MM
+        has_mail_now = proximity_data > PROXIMITY_MAIL_THRESHOLD_MM
         
         if has_mail_now != mailbox_state["has_mail"]:
             new_state["has_mail"] = has_mail_now
