@@ -25,10 +25,12 @@ android {
             )
         }
     }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
     }
+
     buildFeatures {
         viewBinding = true
     }
@@ -36,12 +38,18 @@ android {
 
 dependencies {
     implementation(files("libs/ssh.jar"))
+
     implementation(libs.appcompat)
     implementation(libs.material)
     implementation(libs.constraintlayout)
+
+    // Navigation libraries are fine to keep if you still use them.
+    // If you removed fragments/nav graph completely, we can remove these later.
     implementation(libs.navigation.fragment)
     implementation(libs.navigation.ui)
+
     implementation(libs.activity)
+
     testImplementation(libs.junit)
     androidTestImplementation(libs.ext.junit)
     androidTestImplementation(libs.espresso.core)
