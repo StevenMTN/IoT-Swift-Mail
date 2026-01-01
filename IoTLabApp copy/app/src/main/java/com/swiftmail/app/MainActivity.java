@@ -25,6 +25,10 @@ public class MainActivity extends AppCompatActivity {
     private static final String CHANNEL_ID = "swiftmail_alerts";
     private static final int REQ_NOTIF_PERMISSION = 1001;
 
+    // Planned sensor thresholds (ready for MQTT)
+    private static final int LUX_OPEN_THRESHOLD = 18;        // Door open if > 18
+    private static final int PROX_NEW_MAIL_THRESHOLD = 8000; // New mail if > 8000
+
     private TextView tvDoorStatusValue;
     private TextView tvMailStatus;
     private TextView tvLastDeliveryValue;
@@ -37,7 +41,6 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        // Initialize UI components
         tvDoorStatusValue = findViewById(R.id.tv_door_status_value);
         tvMailStatus = findViewById(R.id.tv_mail_status);
         tvLastDeliveryValue = findViewById(R.id.tv_last_delivery_value);
@@ -45,99 +48,146 @@ public class MainActivity extends AppCompatActivity {
         Button btnToggleDoor = findViewById(R.id.btn_toggle_door);
         Button btnUpdateMail = findViewById(R.id.btn_update_mail);
 
-        // Notifications setup
+        // Notification setup
         createNotificationChannel();
         requestNotificationPermissionIfNeeded();
 
-        // Initial UI text
-        updateDoorStatus();
-        updateMailStatus();
+        // Initial UI render
+        refreshUI();
 
-        // Door button (testing)
+        // Buttons = REFRESH ONLY (MQTT-ready)
         btnToggleDoor.setOnClickListener(v -> {
-            isDoorOpen = !isDoorOpen;
-            updateDoorStatus();
+            // TODO (MQTT): Request latest door sensor value
+        });
 
-            // Send a notification whenever door status changes
-            String doorState = isDoorOpen ? getString(R.string.door_open) : getString(R.string.door_closed);
+        btnUpdateMail.setOnClickListener(v -> {
+            // TODO (MQTT): Request latest mail sensor value
+        });
+    }
+
+    /* ============================
+       SENSOR ENTRY POINTS (MQTT)
+       ============================ */
+
+    // Called when LUX sensor is connected
+    public void onSensorUpdateLux(int luxValue) {
+        boolean doorOpenFromLux = luxValue > LUX_OPEN_THRESHOLD;
+        applyDoorState(doorOpenFromLux);
+    }
+
+    // Called when proximity sensor value is connected
+    public void onSensorUpdateProximity(int proximityValue) {
+        boolean newMailFromProx = proximityValue > PROX_NEW_MAIL_THRESHOLD;
+        applyMailState(newMailFromProx);
+    }
+
+    /* ============================
+       STATE HANDLING
+       ============================ */
+
+    private void applyDoorState(boolean newDoorOpen) {
+        boolean changed = (newDoorOpen != isDoorOpen);
+        isDoorOpen = newDoorOpen;
+
+        updateDoorStatus();
+
+        // Notify ONLY on real state change
+        if (changed) {
+            String doorState = isDoorOpen
+                    ? getString(R.string.door_open)
+                    : getString(R.string.door_closed);
+
             showNotification(
                     "Door status changed",
                     "Mailbox door is now: " + doorState,
                     2001
             );
-        });
-
-        // Mail update button (testing)
-        btnUpdateMail.setOnClickListener(v -> {
-            boolean wasNewMail = hasNewMail;
-            hasNewMail = !hasNewMail; // Toggle mail status for testing
-
-            updateMailStatus();
-
-            // Only update "Last delivery" when there is new mail
-            if (hasNewMail) {
-                tvLastDeliveryValue.setText(getCurrentTime());
-            }
-
-            // Only notify when it becomes "new mail delivered"
-            if (!wasNewMail && hasNewMail) {
-                showNotification(
-                        "New mail delivered",
-                        "You have received new mail.",
-                        2002
-                );
-            }
-        });
+        }
     }
 
-    // Door status UI update
+    private void applyMailState(boolean newHasMail) {
+        boolean becameNewMail = (!hasNewMail && newHasMail);
+        hasNewMail = newHasMail;
+
+        updateMailStatus();
+
+        // Update timestamp ONLY when new mail arrives
+        if (becameNewMail) {
+            tvLastDeliveryValue.setText(getCurrentDateTime());
+
+            showNotification(
+                    "New mail delivered",
+                    "You have received new mail.",
+                    2002
+            );
+        }
+    }
+
+    /* ============================
+       UI UPDATES
+       ============================ */
+
+    private void refreshUI() {
+        updateDoorStatus();
+        updateMailStatus();
+    }
+
     private void updateDoorStatus() {
-        if (isDoorOpen) {
-            tvDoorStatusValue.setText(getString(R.string.door_open));
-        } else {
-            tvDoorStatusValue.setText(getString(R.string.door_closed));
-        }
+        tvDoorStatusValue.setText(
+                isDoorOpen
+                        ? getString(R.string.door_open)
+                        : getString(R.string.door_closed)
+        );
     }
 
-    // Mail status UI update
     private void updateMailStatus() {
-        if (hasNewMail) {
-            tvMailStatus.setText(getString(R.string.mail_new));
-        } else {
-            tvMailStatus.setText(getString(R.string.mail_none));
-        }
+        tvMailStatus.setText(
+                hasNewMail
+                        ? getString(R.string.mail_new)
+                        : getString(R.string.mail_none)
+        );
     }
 
-    // Time of last delivery
-    private String getCurrentTime() {
-        return new SimpleDateFormat("HH:mm:ss", Locale.getDefault())
-                .format(new Date());
+    /* ============================
+       DATE + TIME
+       ============================ */
+
+    private String getCurrentDateTime() {
+        return new SimpleDateFormat(
+                "yyyy-MM-dd HH:mm:ss",
+                Locale.getDefault()
+        ).format(new Date());
     }
 
-    // Create a notification channel (Android 8.0+)
+    /* ============================
+       NOTIFICATIONS
+       ============================ */
+
     private void createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            String name = "Swift Mail Alerts";
-            String description = "Notifications for door and mail events";
-            int importance = NotificationManager.IMPORTANCE_DEFAULT;
+            NotificationChannel channel = new NotificationChannel(
+                    CHANNEL_ID,
+                    "Swift Mail Alerts",
+                    NotificationManager.IMPORTANCE_DEFAULT
+            );
+            channel.setDescription("Notifications for door and mail events");
 
-            NotificationChannel channel = new NotificationChannel(CHANNEL_ID, name, importance);
-            channel.setDescription(description);
-
-            NotificationManager notificationManager =
+            NotificationManager manager =
                     (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
 
-            if (notificationManager != null) {
-                notificationManager.createNotificationChannel(channel);
+            if (manager != null) {
+                manager.createNotificationChannel(channel);
             }
         }
     }
 
-    // Ask for POST_NOTIFICATIONS on Android 13+ (API 33+)
     private void requestNotificationPermissionIfNeeded() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
-                    != PackageManager.PERMISSION_GRANTED) {
+            if (ContextCompat.checkSelfPermission(
+                    this,
+                    Manifest.permission.POST_NOTIFICATIONS
+            ) != PackageManager.PERMISSION_GRANTED) {
+
                 ActivityCompat.requestPermissions(
                         this,
                         new String[]{Manifest.permission.POST_NOTIFICATIONS},
@@ -147,23 +197,23 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    // Show a notification (only if permission is granted on Android 13+)
-    private void showNotification(String title, String message, int notificationId) {
+    private void showNotification(String title, String message, int id) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
-                    != PackageManager.PERMISSION_GRANTED) {
-                return; // Permission not granted, do nothing
+            if (ContextCompat.checkSelfPermission(
+                    this,
+                    Manifest.permission.POST_NOTIFICATIONS
+            ) != PackageManager.PERMISSION_GRANTED) {
+                return;
             }
         }
 
         NotificationCompat.Builder builder =
                 new NotificationCompat.Builder(this, CHANNEL_ID)
-                        .setSmallIcon(R.mipmap.ic_launcher) // Simple default icon
+                        .setSmallIcon(R.mipmap.ic_launcher)
                         .setContentTitle(title)
                         .setContentText(message)
-                        .setPriority(NotificationCompat.PRIORITY_DEFAULT)
                         .setAutoCancel(true);
 
-        NotificationManagerCompat.from(this).notify(notificationId, builder.build());
+        NotificationManagerCompat.from(this).notify(id, builder.build());
     }
 }

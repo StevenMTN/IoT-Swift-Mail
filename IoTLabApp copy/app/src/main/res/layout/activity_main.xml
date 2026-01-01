@@ -13,7 +13,7 @@
         android:adjustViewBounds="true"
         android:scaleType="centerCrop"
         android:layout_marginBottom="32dp"
-        android:src="@drawable/swift_mail_logo" />android:layout_marginBottom="32dp"
+        android:src="@drawable/swift_mail_logo" />
 
     <!-- MIDDLE: title + status, med padding -->
     <LinearLayout
