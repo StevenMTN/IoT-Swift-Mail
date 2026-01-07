@@ -53,4 +53,9 @@ dependencies {
     testImplementation(libs.junit)
     androidTestImplementation(libs.ext.junit)
     androidTestImplementation(libs.espresso.core)
+
+    // Replaced old Paho library with a fork that supports Android 12+ (PendingIntent fix)
+    implementation("com.github.hannesa2:paho.mqtt.android:3.3.5")
+    implementation("androidx.legacy:legacy-support-v4:1.0.0")
+
 }

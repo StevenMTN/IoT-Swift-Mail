@@ -16,6 +16,15 @@ import androidx.core.app.NotificationCompat;
 import androidx.core.app.NotificationManagerCompat;
 import androidx.core.content.ContextCompat;
 
+import info.mqtt.android.service.Ack;
+import info.mqtt.android.service.MqttAndroidClient;
+import org.eclipse.paho.client.mqttv3.IMqttActionListener;
+import org.eclipse.paho.client.mqttv3.IMqttToken;
+import org.eclipse.paho.client.mqttv3.MqttCallback;
+import org.eclipse.paho.client.mqttv3.MqttConnectOptions;
+import org.eclipse.paho.client.mqttv3.MqttMessage;
+import org.eclipse.paho.client.mqttv3.IMqttDeliveryToken;
+
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Locale;
@@ -28,6 +37,12 @@ public class MainActivity extends AppCompatActivity {
     // Planned sensor thresholds (ready for MQTT)
     private static final int LUX_OPEN_THRESHOLD = 18;        // Door open if > 18
     private static final int PROX_NEW_MAIL_THRESHOLD = 8000; // New mail if > 8000
+
+    // MQTT configuration
+    private static final String MQTT_BROKER = "tcp://test.mosquitto.org:1883";
+    private static final String MQTT_TOPIC = "swiftmail/sensors";
+
+    private MqttAndroidClient mqttClient;
 
     private TextView tvDoorStatusValue;
     private TextView tvMailStatus;
@@ -55,6 +70,9 @@ public class MainActivity extends AppCompatActivity {
         // Initial UI render
         refreshUI();
 
+        // MQTT setup
+        setupMqtt();
+
         // Buttons = REFRESH ONLY (MQTT-ready)
         btnToggleDoor.setOnClickListener(v -> {
             // TODO (MQTT): Request latest door sensor value
@@ -63,6 +81,66 @@ public class MainActivity extends AppCompatActivity {
         btnUpdateMail.setOnClickListener(v -> {
             // TODO (MQTT): Request latest mail sensor value
         });
+    }
+
+    /* ============================
+       MQTT SETUP
+       ============================ */
+
+    private void setupMqtt() {
+        String clientId = "SwiftMail-" + System.currentTimeMillis();
+        // The constructor for the replacement Paho MQTT library (hannesa2) requires an additional Ack argument
+        mqttClient = new MqttAndroidClient(this, MQTT_BROKER, clientId, Ack.AUTO_ACK);
+
+        MqttConnectOptions options = new MqttConnectOptions();
+        options.setCleanSession(true);
+        options.setAutomaticReconnect(true);
+
+        mqttClient.setCallback(new MqttCallback() {
+            @Override
+            public void connectionLost(Throwable cause) {
+            }
+
+            @Override
+            public void messageArrived(String topic, MqttMessage message) {
+                handleIncomingMessage(message.toString());
+            }
+
+            @Override
+            public void deliveryComplete(IMqttDeliveryToken token) {
+            }
+        });
+
+        mqttClient.connect(options, null, new IMqttActionListener() {
+            @Override
+            public void onSuccess(IMqttToken asyncActionToken) {
+                mqttClient.subscribe(MQTT_TOPIC, 0);
+            }
+
+            @Override
+            public void onFailure(IMqttToken asyncActionToken, Throwable exception) {
+                exception.printStackTrace();
+            }
+        });
+    }
+
+    private void handleIncomingMessage(String payload) {
+        // Expected format: lux.proximity
+        String[] values = payload.split("\\.");
+
+        if (values.length == 2) {
+            try {
+                int lux = (int) Float.parseFloat(values[0]);
+                int proximity = Integer.parseInt(values[1]);
+
+                runOnUiThread(() -> {
+                    onSensorUpdateLux(lux);
+                    onSensorUpdateProximity(proximity);
+                });
+
+            } catch (NumberFormatException ignored) {
+            }
+        }
     }
 
     /* ============================
