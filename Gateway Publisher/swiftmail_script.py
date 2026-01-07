@@ -1,78 +1,88 @@
-# Imports for MQTT
 import time
 import datetime
 import paho.mqtt.client as mqtt
-
-# Using decimal to round the value for lux :)
 from decimal import Decimal
 
-# Imports for sensor
 import board
 import busio
+import adafruit_vcnl4010
+import adafruit_tsl2591
 
-# Sensors
-import adafruit_vcnl4010     # Proximity sensor
-import adafruit_tsl2591     # High range lux sensor
 
-# Initialize I2C bus
-i2c = busio.I2C(board.SCL, board.SDA)
+# SENSOR THRESHOLDS
+LUX_OPEN_THRESHOLD = 18
+PROX_NEW_MAIL_THRESHOLD = 8000
 
-# Initialize sensors
-sensor = adafruit_tsl2591.TSL2591(i2c)     # Lux sensor
-sensor2 = adafruit_vcnl4010.VCNL4010(i2c)  # Proximity sensor
 
-# MQTT broker and topic
+# MQTT CONFIG
 broker = "test.mosquitto.org"
-pub_topic = "swiftmail/sensors"
+BASE_TOPIC = "swiftmail"
 
-# MQTT callbacks
 
+# I2C + SENSORS
+i2c = busio.I2C(board.SCL, board.SDA)
+lux_sensor = adafruit_tsl2591.TSL2591(i2c)
+prox_sensor = adafruit_vcnl4010.VCNL4010(i2c)
+
+# MQTT CALLBACKS
 def on_connect(client, userdata, flags, rc):
-    if rc == 0:
-        print("Connection established. Code:", rc)
-    else:
-        print("Connection failed. Code:", rc)
-
-def on_publish(client, userdata, mid):
-    print("Published message ID:", mid)
+    print("Connected with result code:", rc)
 
 def on_disconnect(client, userdata, rc):
-    print("Disconnected. Code:", rc)
+    print("Disconnected with result code:", rc)
 
-# Sensor functions
-
-def get_lux():
-    lux = sensor.lux
-    lux_value = round(Decimal(lux), 3)
-    print(f"Lux: {lux_value}")
-    return lux_value
-
-def get_proximity():
-    proximity = sensor2.proximity
-    print(f"Proximity: {proximity}")
-    return proximity
-
-# MQTT setup
-
+# MQTT CLIENT
 client = mqtt.Client()
 client.on_connect = on_connect
 client.on_disconnect = on_disconnect
-client.on_publish = on_publish
 
 print("Connecting to broker:", broker)
-client.connect(broker)
+client.connect(broker, 1883, 60)
 client.loop_start()
 
-# Publish loop
+# INITIAL STATE MEMORY
+last_door_state = None
+last_mail_state = None
 
+# MAIN LOOP
 while True:
-    lux = get_lux()
-    proximity = get_proximity()
+    lux = round(Decimal(lux_sensor.lux), 2)
+    proximity = prox_sensor.proximity
 
-    # Combine into one message
-    data_to_send = f"{lux}.{proximity}"
+    # Publish raw sensor values
+    client.publish(f"{BASE_TOPIC}/raw/lux", lux, retain=True)
+    client.publish(f"{BASE_TOPIC}/raw/proximity", proximity, retain=True)
 
-    print("Sending:", data_to_send)
-    client.publish(pub_topic, data_to_send)
+    # Detect door events
+    door_state = "OPEN" if lux > LUX_OPEN_THRESHOLD else "CLOSED"
+
+    if door_state != last_door_state:
+        print("Door event:", door_state)
+        client.publish(
+            f"{BASE_TOPIC}/status/door",
+            door_state,
+            retain=True
+        )
+        last_door_state = door_state
+
+    # Detect mail events
+    mail_state = "NEW_MAIL" if proximity > PROX_NEW_MAIL_THRESHOLD else "NO_MAIL"
+
+    if mail_state != last_mail_state:
+        print("Mail event:", mail_state)
+        client.publish(
+            f"{BASE_TOPIC}/status/mail",
+            mail_state,
+            retain=True
+        )
+        last_mail_state = mail_state
+
+    # Pinging if the device is alive (heartbeat)
+    timestamp = datetime.datetime.now().isoformat()
+    client.publish(
+        f"{BASE_TOPIC}/heartbeat",
+        timestamp,
+        retain=True
+    )
 
     time.sleep(2)
