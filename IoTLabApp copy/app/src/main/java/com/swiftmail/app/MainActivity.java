@@ -9,6 +9,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.widget.Button;
 import android.widget.TextView;
+import android.util.Log;
 
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
@@ -20,10 +21,26 @@ import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Locale;
 
+import org.eclipse.paho.android.service.MqttAndroidClient;
+import org.eclipse.paho.client.mqttv3.MqttCallback;
+import org.eclipse.paho.client.mqttv3.MqttConnectOptions;
+import org.eclipse.paho.client.mqttv3.MqttException;
+import org.eclipse.paho.client.mqttv3.MqttMessage;
+import org.eclipse.paho.client.mqttv3.IMqttActionListener;
+import org.eclipse.paho.client.mqttv3.IMqttToken;
+import org.eclipse.paho.client.mqttv3.IMqttDeliveryToken;
+
 public class MainActivity extends AppCompatActivity {
 
     private static final String CHANNEL_ID = "swiftmail_alerts";
     private static final int REQ_NOTIF_PERMISSION = 1001;
+
+    // MQTT Client
+    private MqttAndroidClient mqttClient;
+    private static final String MQTT_BROKER_URI = "tcp://test.mosquitto.org:1883";
+    private static final String MQTT_TOPIC = "swiftmail/#";
+    private static final int MQTT_QOS = 1;
+    private static final String MQTT_LOG_TAG = "MQTT";
 
     // Planned sensor thresholds (ready for MQTT)
     private static final int LUX_OPEN_THRESHOLD = 18;        // Door open if > 18
@@ -55,14 +72,113 @@ public class MainActivity extends AppCompatActivity {
         // Initial UI render
         refreshUI();
 
+        // MQTT setup
+        setupMqtt();
+
         // Buttons = REFRESH ONLY (MQTT-ready)
-        btnToggleDoor.setOnClickListener(v -> {
-            // TODO (MQTT): Request latest door sensor value
+        btnToggleDoor.setOnClickListener(v ->
+            // TODO (MQTT): Request latest door sensor value (Placerholder currently re-render the last known value)
+            refreshUI()
+        );
+
+        btnUpdateMail.setOnClickListener(v ->
+            // TODO (MQTT): Request latest mail sensor value (Placerholder currently re-render the last known value)
+            refreshUI()
+        );
+    }
+
+    /* ============================
+       MQTT SETUP
+       ============================ */
+    private void setupMqtt() {
+        String clientId = "SwiftMail-" + System.currentTimeMillis();
+
+        // Initialize MQTT client
+        mqttClient = new MqttAndroidClient(this, MQTT_BROKER_URI, clientId);
+
+        // Attach single callback before connecting
+        mqttClient.setCallback(new MqttCallback() {
+
+            @Override
+            public void connectionLost(Throwable cause) {
+                android.util.Log.e("MQTT", "Connection lost", cause);
+            }
+
+            @Override
+            public void messageArrived(String topic, MqttMessage message) {
+                String payload = new String(message.getPayload()).trim();
+                Log.i(MQTT_LOG_TAG, "Message arrived | Topic: " + topic + " | Payload: " + payload);
+
+                try {
+                    runOnUiThread(() -> {
+                        if (topic.equals("swiftmail/raw/lux")) {
+                            try {
+                                float luxValue = Float.parseFloat(payload);
+                                Log.i(MQTT_LOG_TAG, "Detected LUX value: " + luxValue);
+                                onSensorUpdateLux(luxValue);
+                            } catch (NumberFormatException e) {
+                                Log.e(MQTT_LOG_TAG, "Lux payload is not a valid float", e);
+                            }
+                        } else if (topic.equals("swiftmail/raw/proximity")) {
+                            try {
+                                int proxValue = Integer.parseInt(payload);
+                                Log.i(MQTT_LOG_TAG, "Detected PROXIMITY value: " + proxValue);
+                                onSensorUpdateProximity(proxValue);
+                            } catch (NumberFormatException e) {
+                                Log.e(MQTT_LOG_TAG, "Proximity payload is not an integer", e);
+                            }
+                        }
+                    });
+
+                } catch (Exception e) {
+                    Log.e(MQTT_LOG_TAG, "Error processing MQTT message", e);
+                }
+            }
+
+            @Override
+            public void deliveryComplete(IMqttDeliveryToken token) {
+                // Not used for subscriber-only app
+            }
         });
 
-        btnUpdateMail.setOnClickListener(v -> {
-            // TODO (MQTT): Request latest mail sensor value
-        });
+        // Connect options
+        MqttConnectOptions options = new MqttConnectOptions();
+        options.setCleanSession(true);
+        options.setAutomaticReconnect(true);
+
+        // Connect and subscribe
+        try {
+            mqttClient.connect(options, null, new IMqttActionListener() {
+                @Override
+                public void onSuccess(IMqttToken asyncActionToken) {
+                    android.util.Log.i("MQTT", "MQTT connected successfully.");
+
+                    // Subscribe to topic after connection
+                    try {
+                        mqttClient.subscribe(MQTT_TOPIC, 1, null, new IMqttActionListener() {
+                            @Override
+                            public void onSuccess(IMqttToken asyncActionToken) {
+                                android.util.Log.i("MQTT", "Subscribed to topic: " + MQTT_TOPIC);
+                            }
+
+                            @Override
+                            public void onFailure(IMqttToken asyncActionToken, Throwable exception) {
+                                android.util.Log.e("MQTT", "Subscription failed", exception);
+                            }
+                        });
+                    } catch (MqttException e) {
+                        e.printStackTrace();
+                    }
+                }
+
+                @Override
+                public void onFailure(IMqttToken asyncActionToken, Throwable exception) {
+                    android.util.Log.e("MQTT", "MQTT connection failed", exception);
+                }
+            });
+        } catch (MqttException e) {
+            e.printStackTrace();
+        }
     }
 
     /* ============================
@@ -70,7 +186,7 @@ public class MainActivity extends AppCompatActivity {
        ============================ */
 
     // Called when LUX sensor is connected
-    public void onSensorUpdateLux(int luxValue) {
+    public void onSensorUpdateLux(float luxValue) {
         boolean doorOpenFromLux = luxValue > LUX_OPEN_THRESHOLD;
         applyDoorState(doorOpenFromLux);
     }
