@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- Brand colors -->
+    <color name="swift_dark_bg">#0A1A2F</color>        <!-- Dark navy background -->
+    <color name="swift_blue">#4BA3F2</color>          <!-- Blue (logo gradient side) -->
+    <color name="swift_cyan">#5CE1E6</color>          <!-- Cyan (logo gradient side) -->
+    <color name="swift_white">#FFFFFFFF</color>       <!-- White text -->
+
+    <!-- UI colors -->
+    <color name="text_primary">#FFFFFFFF</color>
+    <color name="text_secondary">#B8C6D1</color>      <!-- Soft gray-blue -->
+
+    <!-- Button colors -->
+    <color name="button_bg">#4BA3F2</color>           <!-- Blue button -->
+    <color name="button_pressed">#397CC0</color>      <!-- Darker blue on press -->
+
+    <!-- Keep standard Android colors if needed -->
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+
+</resources>
