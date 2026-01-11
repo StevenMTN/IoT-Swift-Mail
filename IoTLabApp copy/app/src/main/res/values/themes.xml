@@ -1,0 +1,29 @@
+<resources xmlns:tools="http://schemas.android.com/tools">
+
+    <style name="Theme.SwiftMail" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <!-- Background color -->
+        <item name="android:windowBackground">@color/swift_dark_bg</item>
+
+        <!-- Text colors -->
+        <item name="android:textColor">@color/text_primary</item>
+
+        <!-- Primary brand color -->
+        <item name="colorPrimary">@color/swift_blue</item>
+        <item name="colorPrimaryVariant">@color/swift_cyan</item>
+        <item name="colorOnPrimary">@color/swift_white</item>
+
+        <!-- Button colors -->
+        <item name="materialButtonStyle">@style/SwiftMailButton</item>
+
+    </style>
+
+    <!-- Button style -->
+    <style name="SwiftMailButton" parent="Widget.MaterialComponents.Button">
+        <item name="backgroundTint">@color/button_bg</item>
+        <item name="rippleColor">@color/button_pressed</item>
+        <item name="android:textColor">@color/swift_white</item>
+        <item name="cornerRadius">24dp</item>
+        <item name="android:padding">12dp</item>
+    </style>
+
+</resources>

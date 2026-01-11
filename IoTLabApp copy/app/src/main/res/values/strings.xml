@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- App name -->
+    <string name="app_name">Swift Mail</string>
+
+    <!-- Door status UI text -->
+    <string name="door_status_label">Door status:</string>
+    <string name="door_open">Open</string>
+    <string name="door_closed">Closed</string>
+
+    <!-- Mail status UI text -->
+    <string name="mail_status_label">Mail status:</string>
+    <string name="mail_new">New mail delivered</string>
+    <string name="mail_none">No new mail</string>
+
+    <!-- Last delivery -->
+    <string name="last_delivery_label">Last delivery:</string>
+
+    <!-- Buttons used in the layout -->
+    <string name="btn_toggle_door">Update door status</string>
+    <string name="btn_update_mail">Update delivery status</string>
+
+</resources>
